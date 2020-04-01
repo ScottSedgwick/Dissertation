@@ -1,16 +1,16 @@
 -- | Module: Frogger.Type
 module Type where
 
-import Graphics.Gloss
-import System.Random
+import Graphics.Gloss (Picture(BitmapSection, Blank, Pictures), Rectangle(..), color, makeColor, rectangleSolid, rectPos, rectSize, rotate, scale, translate, white)
+import System.Random  (StdGen, next)
 
 -- * Initial Values
 
 -- | The y values for each lane, starting at the first road lane
 lanes :: [Float]
-lanes = let l = 15
+lanes = let l' = 15
             h = 3150
-         in takeWhile (<=h) . map (\n -> (n*h/l) - 100) $ [1,2..]
+         in takeWhile (<=h) . map (\n -> (n*h/l') - 100) $ [1,2..]
 
 -- * Type Declarations
 
@@ -56,10 +56,10 @@ data Frogger = Frogger { fr_Entity   :: Entity -- ^ The Entity containing import
                deriving (Eq, Show)
 
 -- | The data type for all vehicles on the Road.
-data RoadMover = -- | A Car
-                 Car { ro_Entity :: Entity -- ^ The Entity containing important values about the Car
-                 }
-                 deriving (Eq, Show)
+newtype RoadMover = -- | A Car
+                  Car { ro_Entity :: Entity -- ^ The Entity containing important values about the Car
+                  }
+                  deriving (Eq, Show)
 
 -- | The data type for all objects on the River.
 data RiverMover = -- | A Crocodile
@@ -103,13 +103,15 @@ data Env = E { player       :: Frogger      -- ^ The Frogger.
 
 -- | A typeclass which will contain all objects that are drawn to the screen.
 --   This should cut down enormously on boilerplate code, and allow for some level of polymorphism whilst maintaining type clarity.
+genDraw :: Drawable a => a -> Picture
+genDraw d = let sp = getSprites d
+                spr = snd . head $ sp
+                (sprL, sprW) = getSpriteSize spr
+            in translate (getX d) (getY d) . scale (getL d/fromIntegral sprL) (getW d/fromIntegral sprW) $ spr
 class Show a => Drawable a where
   -- | A function to draw the object to the screen.
   draw :: a -> Picture
-  draw d = let sp = getSprites d
-               spr = snd . head $ sp
-               (sprL, sprW) = getSpriteSize spr
-            in translate (getX d) (getY d) . scale (getL d/fromIntegral sprL) (getW d/fromIntegral sprW) $ spr
+  draw = genDraw
   -- | A function to draw a list of objects to the screen.
   draws :: [a] -> Picture
   draws = Pictures . map draw
@@ -160,17 +162,16 @@ class Show a => Drawable a where
   -- | A function to get any sprites for the Drawable
   assignSprites :: [(String, Sprite)] -> a -> a
   assignSprites sss d = let ider = takeWhile (/=' ') $ show d
-                            sss' = map snd . filter (\x -> fst x == ider) $ sss
+                            sss' = map snd . filter (\x' -> fst x' == ider) $ sss
                             en' = (getEntity d) {ss = sss'}
                          in setEntity en' d
-
 
 -- * Type Constructors
 
 -- | Constructing a Frogger at the default start position.
 newPlayer :: Frogger
 newPlayer = Frogger {fr_Entity = Entity {x  = 2000
-                                        ,y  = lanes!!0
+                                        ,y  = head lanes
                                         ,dX = 0
                                         ,dY = 0
                                         ,l  = 180
@@ -303,6 +304,8 @@ startEnv sW sH r = let vels = velList r
                          ,sWidth = sW
                          ,sHeight = sH
                          ,rGen = r
+                         ,background = Blank
+                         ,spriteList = []
                          }
 
 -- | The initial velocities for each lanes.
@@ -321,12 +324,16 @@ rList = map fst . rList'
 otherNeg :: (Ord a, Num a) => [a] -> [a]
 otherNeg = otherNeg' . filter (>0)
            where otherNeg' [] = []
-                 otherNeg' (p:[]) = [p]
+                 otherNeg' [p] = [p]
                  otherNeg' (p:q:ps) = if p > 0
                                      then p : otherNeg' ((-q):ps)
                                      else p : otherNeg' (q:ps)
 
 -- * Class Instance Declarations
+
+  -- update :: Float -- ^ The number of seconds to update the object by
+  --        -> a     -- ^ The object to be updated
+  --        -> a     -- ^ The resultant object
 
 instance Drawable RiverMover where
   getEntity = ri_Entity
@@ -339,24 +346,25 @@ instance Drawable RiverMover where
                     in r {ri_Entity = re {dX = dx'}}
   setdY dy' r = let re = ri_Entity r
                     in r {ri_Entity = re {dY = dy'}}
-  update ms t@Turtles {aboveWater = aw, submergeTimer = st, surfaceDuration = sd}
+  update ms t@Turtles {aboveWater = aw, submergeTimer = st, surfaceDuration = sd, ri_Entity = re}
     = let sd' = if aw then sd else sd / 2                   -- They're underwater for half the time they're above it for
           st' = let new = st + ms                           -- New timer = old plus ∂t
                  in if new >= sd' then 0 else new           -- Unless that == duration in which case its 0
           aw' = if st' == 0 then not aw                     -- If it is 0 then surface/submerge
                             else aw                         -- Otherwise don't
-       in setX (loopX $ getX t + getdX t) . setY (getY t + getdY t) $ t {aboveWater = aw'
-                                                                        ,submergeTimer = st'}
+       in setX (loopX $ getX t + getdX t) . setY (getY t + getdY t) $ Turtles {aboveWater = aw'
+                                                                              ,submergeTimer = st'
+                                                                              ,surfaceDuration = sd
+                                                                              ,ri_Entity = re}
   update _ ri = setX (loopX $ getX ri + getdX ri) . setY (getY ri + getdY ri) $ ri
-  draw t@Turtles {aboveWater = aw}
-    = let spr = if aw then snd . head . filter ((=="surfaced") . fst) . getSprites $ t
-                      else snd . head . filter ((=="submerged") . fst) . getSprites $ t
-          (sprL, sprW) = getSpriteSize spr
-       in translate (getX t) (getY t) . scale (0-getL t/fromIntegral sprL) (getW t/fromIntegral sprW) $ spr
-  draw d = let sp = getSprites d
-               spr = snd . head $ sp
-               (sprL, sprW) = getSpriteSize spr
-            in translate (getX d) (getY d) . scale (getL d/fromIntegral sprL) (getW d/fromIntegral sprW) $ spr
+  draw d =
+    case d of
+      t@Turtles {aboveWater = aw} ->
+        let spr = if aw then snd . head . filter ((=="surfaced") . fst) . getSprites $ t
+                        else snd . head . filter ((=="submerged") . fst) . getSprites $ t
+            (sprL, sprW) = getSpriteSize spr
+         in translate (getX t) (getY t) . scale (negate(getL t/fromIntegral sprL)) (getW t/fromIntegral sprW) $ spr
+      _ -> genDraw d
 
 instance Drawable Goal where
   getEntity = go_Entity
@@ -367,8 +375,8 @@ instance Drawable Goal where
   setdY _ = id
   update _ = id
   draw g = let sp = getSprites g
-               spr' = if is_Occupied g then filter ((=="occupied") . fst) $ sp
-                                       else filter ((/="occupied") . fst) $ sp
+               spr' = if is_Occupied g then filter ((=="occupied") . fst) sp
+                                       else filter ((/="occupied") . fst) sp
                spr = snd . head $ spr'
                (sprL, sprW) = getSpriteSize spr
             in translate (getX g) (getY g) . scale (getL g/fromIntegral sprL) (getW g/fromIntegral sprW) $ spr
@@ -397,12 +405,12 @@ instance Drawable Frogger where
                                       yf = getY f
                                       lf = getL f
                                       wf = getW f
-                                      (x',y',l',w') = if is_Jumping f then (xf, yf, lf * 1.1, wf * 1.1) else (xf,yf,lf,wf)
+                                      (x',y',l',w') = if isJumping f then (xf, yf, lf * 1.1, wf * 1.1) else (xf,yf,lf,wf)
                                    in translate x' y' . scale l' w' $ Pictures $ map (rotate dir) [color darkGreen $ rectangleSolid 1.0 1.0
                                                                                                   ,color white . translate 0.4 0.4 $ rectangleSolid 0.1 0.1
                                                                                                   ,color white . translate (-0.4) 0.4  $ rectangleSolid 0.1 0.1
                                                                                                   ]
-                           _  -> let spr = if is_Jumping f
+                           _  -> let spr = if isJumping f
                                            then snd . head . filter ((=="jumping") . fst) . getSprites $ f
                                            else snd . head . filter ((=="landed") . fst) . getSprites $ f
                                      (sprL, sprW) = getSpriteSize spr
@@ -436,24 +444,24 @@ assignAllSprites e@E {player=p,roadEnemies=roE,riverEnemies=riE,goals=g,spriteLi
 
 -- | 'getSpriteSize' returns a tuple containing the Sprites length and width.
 getSpriteSize :: Picture -> (Int, Int)
-getSpriteSize (BitmapSection (Rectangle {rectPos = _, rectSize = lw}) _) = lw
+getSpriteSize (BitmapSection Rectangle{rectPos = _, rectSize = lw} _) = lw
 getSpriteSize (Pictures xs) = getMaxSize (0,0) $ map getSpriteSize xs
                               where getMaxSize lw []               = lw
-                                    getMaxSize (l',w') ((l,w):lws) = if l' < l && w' < w
-                                                                     then getMaxSize (l,w) lws
+                                    getMaxSize (l',w') ((l'',w''):lws) = if l' < l'' && w' < w''
+                                                                     then getMaxSize (l'',w'') lws
                                                                      else getMaxSize (l',w') lws
 getSpriteSize _ = (0,0)
 
--- | 'is_Jumping' does as the name suggests, returning a Bool with whether or not the Frogger is jumping.
-is_Jumping :: Frogger -> Bool
-is_Jumping f = is_JumpingX f || is_JumpingY f
+-- | 'isJumping' does as the name suggests, returning a Bool with whether or not the Frogger is jumping.
+isJumping :: Frogger -> Bool
+isJumping f = is_JumpingX f || is_JumpingY f
 
 -- | A function to split a Croc into its head and body - used in collision detection.
 splitCroc :: RiverMover               -- ^ The intial Croc
           -> (RiverMover, RiverMover) -- ^ Its head and body
 splitCroc c@Croc {} = let cx = getX c
                           cy = getY c
-                          l' = (getL c)/3
+                          l' = getL c/3
                           cw = getW c
                           crocHead = Croc {ri_Entity = Entity {x = cx + (l'/2)
                                                               ,y = cy

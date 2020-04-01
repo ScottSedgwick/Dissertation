@@ -1,7 +1,8 @@
 # Functional Frogger
 
 Dependencies:
-- GHC 8.4.1
+
+- GHC 8.8.2
 - cabal
 - Haskell packages:
   - gloss

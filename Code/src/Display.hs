@@ -1,8 +1,8 @@
 -- | Module: Frogger.Display
 module Display where
 
-import Graphics.Gloss
-import Type
+import Graphics.Gloss (Picture(Pictures, Text), black, blue, color, green, greyN, makeColor, rectangleSolid, scale, translate, white)
+import Type           (Env(..), GameState(LevelComplete, PlayerDead, PreStart), Lane, draw, draws, lanes)
 
 -- | A function to draw an 'Env' to the screen.
 --   It scales and translates the 'drawGame' function to the correct window size, and translates it such that coordinates start at the bottom-left of the screen.
@@ -75,5 +75,5 @@ drawLane n = translate 2000 (lanes!!n + 5) $ rectangleSolid 4000 190
 -- | Drawing the sides of the map - the moving objects go beyond the width of the lanes and this hides them from view.
 drawSides :: Picture
 drawSides = let wi = 2000
-             in color black $ Pictures [translate (0-(wi/2)) 1500 $ rectangleSolid wi 3000
+             in color black $ Pictures [translate (negate (wi/2)) 1500 $ rectangleSolid wi 3000
                                        ,translate (4000+(wi/2)) 1500 $ rectangleSolid wi 3000]

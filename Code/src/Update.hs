@@ -1,7 +1,8 @@
 -- | Module: Frogger.Update
 module Update where
 
-import Type
+import Type (Drawable, Env(..), Frogger, GameState(LevelComplete, PlayerDead, Playing), Goal, RiverMover(Croc, Turtles), 
+             aboveWater, assignAllSprites, gameState, getdX, getL, getW, getX, getY, goals, isJumping, is_Occupied, lanes, newPlayer, player, setdX, splitCroc, update)
 
 -- | The function which updates the game on every 'tick'.
 gameUpdate :: Float -- ^ Delta-t in milliseconds
@@ -13,7 +14,7 @@ gameUpdate n e@E{gameState = gs, time = t} = if gs == Playing then updateEnv n $
 -- | updateEnv is a composition of 3 functions which update the positions of moving objects, detect collision between the player and those objects, detect a collision between the player and a goal, and update the score respectively.
 updateEnv :: Float -> Env -> Env
 updateEnv n e = let p = player e
-                    coll = if is_Jumping p
+                    coll = if isJumping p
                            then id
                            else hitCheck
                  in scoreUpdate . coll . updateMovers n $ e
@@ -34,7 +35,7 @@ updateMovers n e = e {player = update n . player $ e
 -- | hitCheck acts as something of a routing function; provided the player is within bounds it calls the relevant function depending upon where on the map they are.
 --   If they are it calls 'inBoundsHitCheck' to determine what to do next.
 hitCheck :: Env -> Env
-hitCheck e@E {player = p} = if inRange (0 - getL p, 4000) (getX p) && inRange (0, 3000) (getY p)
+hitCheck e@E {player = p} = if inRange (negate (getL p), 4000) (getX p) && inRange (0, 3000) (getY p)
                             then inBoundsHitCheck e
                             else e {gameState = PlayerDead "You went out of bounds!"}
 
